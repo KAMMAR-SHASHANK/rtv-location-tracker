@@ -37,7 +37,8 @@ router.get('/locations', async (req, res) => {
         // Fetch all locations and include user information (using Sequelize associations)
         const locations = await Location.findAll({
             include: {
-                model: User, // Assuming you have a User model to reference for userId
+                model: User,
+                as: 'user', // BUG FIX: must match the alias defined in LocationHistory.belongsTo(User, { as: 'user' }) in models/location.js
                 attributes: ['vehicleId', 'vehicleType'], // Adjust attributes as needed
             },
         });
@@ -45,6 +46,41 @@ router.get('/locations', async (req, res) => {
         res.status(200).json({ locations });
     } catch (err) {
         console.error('Error fetching locations:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// NEW: Location history + latest position for a single vehicle.
+// Powers the Citizen Tracker map screen (marker + polyline) and ETA calc.
+// GET /api/locations/vehicle/:vehicleId?limit=50
+router.get('/vehicle/:vehicleId', async (req, res) => {
+    const { vehicleId } = req.params;
+    const limit = parseInt(req.query.limit, 10) || 50;
+
+    try {
+        const user = await User.findOne({
+            where: { vehicleId },
+            attributes: ['vehicleId', 'vehicleType', 'username'],
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'Vehicle not found' });
+        }
+
+        // Most recent N points, newest first
+        const recent = await Location.findAll({
+            where: { vehicleId },
+            order: [['timestamp', 'DESC']],
+            limit,
+        });
+
+        res.status(200).json({
+            vehicle: user,
+            latest: recent[0] || null,
+            history: recent.reverse(), // oldest -> newest, ready to feed straight into a Polyline
+        });
+    } catch (err) {
+        console.error('Error fetching vehicle history:', err);
         res.status(500).json({ error: err.message });
     }
 });

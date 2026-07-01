@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { View, Alert, StyleSheet } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Alert, StyleSheet, TextInput } from "react-native";
 import {
   Text,
   Button,
@@ -9,6 +9,7 @@ import {
 } from "react-native-paper";
 import * as Location from "expo-location";
 import axios from "axios";
+import { calculateETA, formatETA } from "../utils/eta";
 
 const { API_URL } = require("../../creds");
 
@@ -18,6 +19,16 @@ const TrackerDashboard = ({ route, navigation }) => {
   const [location, setLocation] = useState(null);
   const [intervalId, setIntervalId] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const [destLatInput, setDestLatInput] = useState("");
+  const [destLonInput, setDestLonInput] = useState("");
+  const [destination, setDestination] = useState(null);
+  const [eta, setEta] = useState(null);
+  const destinationRef = useRef(null);
+
+  useEffect(() => {
+    destinationRef.current = destination;
+  }, [destination]);
 
   useEffect(() => {
     if (!vehicleId) {
@@ -41,6 +52,19 @@ const TrackerDashboard = ({ route, navigation }) => {
       const id = setInterval(async () => {
         const { coords } = await Location.getCurrentPositionAsync({});
         setLocation(coords);
+
+        const dest = destinationRef.current;
+        if (dest) {
+          // coords.speed is in m/s, reported by the device GPS when available
+          const etaSeconds = calculateETA(
+            coords.latitude,
+            coords.longitude,
+            dest.latitude,
+            dest.longitude,
+            coords.speed
+          );
+          setEta(etaSeconds);
+        }
 
         try {
           await axios.post(`${API_URL}/api/locations/new_location_add`, {
@@ -68,6 +92,16 @@ const TrackerDashboard = ({ route, navigation }) => {
     navigation.navigate("Home");
   };
 
+  const applyDestination = () => {
+    const lat = parseFloat(destLatInput);
+    const lon = parseFloat(destLonInput);
+    if (isNaN(lat) || isNaN(lon)) {
+      Alert.alert("Invalid destination", "Enter valid latitude and longitude.");
+      return;
+    }
+    setDestination({ latitude: lat, longitude: lon });
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.vehicleType}>User Dashboard</Text>
@@ -92,6 +126,30 @@ const TrackerDashboard = ({ route, navigation }) => {
             <Text style={styles.locationText}>
               Location is being fetched...
             </Text>
+          )}
+
+          <View style={styles.destRow}>
+            <TextInput
+              style={styles.destInput}
+              placeholder="Dest. latitude"
+              value={destLatInput}
+              onChangeText={setDestLatInput}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.destInput}
+              placeholder="Dest. longitude"
+              value={destLonInput}
+              onChangeText={setDestLonInput}
+              keyboardType="numeric"
+            />
+          </View>
+          <Button mode="outlined" onPress={applyDestination} style={styles.setDestButton}>
+            Set Destination
+          </Button>
+
+          {destination && (
+            <Text style={styles.etaText}>ETA: {formatETA(eta)}</Text>
           )}
         </Card.Content>
         <Card.Actions>
@@ -135,6 +193,28 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: 10,
+  },
+  destRow: {
+    flexDirection: "row",
+    marginTop: 12,
+  },
+  destInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ced4da",
+    borderRadius: 6,
+    padding: 8,
+    marginRight: 6,
+    backgroundColor: "#fff",
+  },
+  setDestButton: {
+    marginTop: 8,
+  },
+  etaText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#28A745",
+    marginTop: 12,
   },
   logoutButton: {
     marginTop: 20,

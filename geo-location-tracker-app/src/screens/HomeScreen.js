@@ -21,6 +21,12 @@ const HomeScreen = ({ navigation }) => {
             >
                 <Text style={styles.buttonText}>Go to Login</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.button, styles.citizenButton]}
+                onPress={() => navigation.navigate('CitizenTracker')}
+            >
+                <Text style={styles.buttonText}>Track a Vehicle</Text>
+            </TouchableOpacity>
         </View>
     );
 };
@@ -49,6 +55,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         backgroundColor: '#007BFF',
         borderRadius: 5,
+    },
+    citizenButton: {
+        backgroundColor: '#28A745',
     },
     buttonText: {
         color: 'white',
