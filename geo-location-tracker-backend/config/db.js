@@ -3,13 +3,14 @@ const { Sequelize } = require('sequelize');
 
 // Create a Sequelize instance and connect to the MySQL database
 const sequelize = new Sequelize(
-  process.env.MYSQL_DATABASE || 'gltdb', // Database name
-  process.env.MYSQL_USER || 'dfs', // Database username
-  process.env.MYSQL_PASSWORD || 'password', // Database password
+  process.env.MYSQL_DATABASE || 'gltdb',
+  process.env.MYSQL_USER || 'dfs',
+  process.env.MYSQL_PASSWORD || 'password',
   {
     host: process.env.MYSQL_HOST,
-    dialect: 'mysql', // Database dialect
-    logging: false, // Disable logging of SQL queries (optional)
+    port: process.env.MYSQL_PORT || 3306,  // ← add this line
+    dialect: 'mysql',
+    logging: false,
   }
 );
 
