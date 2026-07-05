@@ -8,8 +8,9 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Linking,
+  ScrollView,
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
 import axios from 'axios';
 import { getSpeedFromPoints, calculateETA, formatETA } from '../utils/eta';
 
@@ -27,9 +28,9 @@ const CitizenTrackerScreen = () => {
   const [destLonInput, setDestLonInput] = useState('');
   const [eta, setEta] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const pollRef = useRef(null);
-  const mapRef = useRef(null);
   const destinationRef = useRef(null);
 
   const fetchVehicleHistory = async (vehicleId) => {
@@ -41,6 +42,7 @@ const CitizenTrackerScreen = () => {
 
       setVehicleInfo(vehicle);
       setHistory(points);
+      setLastUpdated(new Date().toLocaleTimeString());
 
       if (points.length >= 2) {
         const last = points[points.length - 1];
@@ -58,16 +60,6 @@ const CitizenTrackerScreen = () => {
           );
           setEta(etaSeconds);
         }
-
-        mapRef.current?.animateToRegion(
-          {
-            latitude: last.latitude,
-            longitude: last.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          },
-          500
-        );
       }
     } catch (err) {
       console.error('Error fetching vehicle history:', err);
@@ -105,6 +97,7 @@ const CitizenTrackerScreen = () => {
     setHistory([]);
     setEta(null);
     setDestination(null);
+    setLastUpdated(null);
     destinationRef.current = null;
   };
 
@@ -122,6 +115,27 @@ const CitizenTrackerScreen = () => {
     destinationRef.current = dest;
   };
 
+  // Opens Google Maps with the vehicle's live location as a pin
+  const openInGoogleMaps = () => {
+    const latest = history[history.length - 1];
+    if (!latest) {
+      Alert.alert('No location yet', 'Waiting for vehicle location...');
+      return;
+    }
+    const { latitude, longitude } = latest;
+    const label = `Vehicle ${trackingVehicleId}`;
+    const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    Linking.openURL(url);
+  };
+
+  // Opens Google Maps directions from vehicle to destination
+  const openDirectionsInGoogleMaps = () => {
+    const latest = history[history.length - 1];
+    if (!latest || !destination) return;
+    const url = `https://www.google.com/maps/dir/${latest.latitude},${latest.longitude}/${destination.latitude},${destination.longitude}`;
+    Linking.openURL(url);
+  };
+
   const latest = history[history.length - 1];
 
   return (
@@ -131,7 +145,8 @@ const CitizenTrackerScreen = () => {
     >
       {!trackingVehicleId ? (
         <View style={styles.searchBox}>
-          <Text style={styles.label}>Track a vehicle (no login required)</Text>
+          <Text style={styles.title}>🚛 Track a Vehicle</Text>
+          <Text style={styles.label}>No login required</Text>
           <TextInput
             style={styles.input}
             placeholder="Enter Vehicle ID"
@@ -146,82 +161,69 @@ const CitizenTrackerScreen = () => {
           </TouchableOpacity>
         </View>
       ) : (
-        <>
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={{
-              latitude: latest?.latitude || 12.9716,
-              longitude: latest?.longitude || 77.5946,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
-          >
-            {history.length > 1 && (
-              <Polyline
-                coordinates={history.map((p) => ({
-                  latitude: p.latitude,
-                  longitude: p.longitude,
-                }))}
-                strokeColor="#007BFF"
-                strokeWidth={3}
-              />
-            )}
+        <ScrollView contentContainerStyle={styles.infoPanel}>
+          <Text style={styles.vehicleLabel}>
+            🚛 Vehicle {trackingVehicleId}
+            {vehicleInfo?.vehicleType ? ` (${vehicleInfo.vehicleType})` : ''}
+          </Text>
 
-            {latest && (
-              <Marker
-                coordinate={{
-                  latitude: latest.latitude,
-                  longitude: latest.longitude,
-                }}
-                title={`Vehicle ${trackingVehicleId}`}
-                description={vehicleInfo?.vehicleType || ''}
-                pinColor="#007BFF"
-              />
-            )}
+          {lastUpdated && (
+            <Text style={styles.updated}>Last updated: {lastUpdated}</Text>
+          )}
 
-            {destination && (
-              <Marker
-                coordinate={destination}
-                title="Destination"
-                pinColor="#28A745"
-              />
-            )}
-          </MapView>
-
-          <View style={styles.infoPanel}>
-            <Text style={styles.vehicleLabel}>
-              Vehicle {trackingVehicleId}
-              {vehicleInfo?.vehicleType ? ` (${vehicleInfo.vehicleType})` : ''}
-            </Text>
-
-            <View style={styles.destRow}>
-              <TextInput
-                style={styles.destInput}
-                placeholder="Dest. latitude"
-                value={destLatInput}
-                onChangeText={setDestLatInput}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.destInput}
-                placeholder="Dest. longitude"
-                value={destLonInput}
-                onChangeText={setDestLonInput}
-                keyboardType="numeric"
-              />
-              <TouchableOpacity style={styles.smallButton} onPress={applyDestination}>
-                <Text style={styles.buttonText}>Set</Text>
-              </TouchableOpacity>
+          {latest ? (
+            <View style={styles.coordBox}>
+              <Text style={styles.coordTitle}>📍 Current Location</Text>
+              <Text style={styles.coordText}>Latitude:  {latest.latitude}</Text>
+              <Text style={styles.coordText}>Longitude: {latest.longitude}</Text>
+              <Text style={styles.coordText}>
+                Time: {new Date(latest.timestamp).toLocaleTimeString()}
+              </Text>
             </View>
+          ) : (
+            <Text style={styles.waiting}>Waiting for location...</Text>
+          )}
 
-            {destination && <Text style={styles.eta}>ETA: {formatETA(eta)}</Text>}
+          {/* Open in Google Maps button */}
+          <TouchableOpacity style={styles.mapsButton} onPress={openInGoogleMaps}>
+            <Text style={styles.buttonText}>📍 Open in Google Maps</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.stopButton} onPress={stopTracking}>
-              <Text style={styles.buttonText}>Stop Tracking</Text>
+          {/* Destination section */}
+          <Text style={styles.sectionLabel}>Set Destination (optional)</Text>
+          <View style={styles.destRow}>
+            <TextInput
+              style={styles.destInput}
+              placeholder="Dest. latitude"
+              value={destLatInput}
+              onChangeText={setDestLatInput}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.destInput}
+              placeholder="Dest. longitude"
+              value={destLonInput}
+              onChangeText={setDestLonInput}
+              keyboardType="numeric"
+            />
+            <TouchableOpacity style={styles.smallButton} onPress={applyDestination}>
+              <Text style={styles.buttonText}>Set</Text>
             </TouchableOpacity>
           </View>
-        </>
+
+          {destination && (
+            <>
+              <Text style={styles.eta}>ETA: {formatETA(eta)}</Text>
+              <TouchableOpacity style={styles.directionsButton} onPress={openDirectionsInGoogleMaps}>
+                <Text style={styles.buttonText}>🗺️ Get Directions in Google Maps</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          <TouchableOpacity style={styles.stopButton} onPress={stopTracking}>
+            <Text style={styles.buttonText}>Stop Tracking</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
     </KeyboardAvoidingView>
   );
@@ -230,7 +232,8 @@ const CitizenTrackerScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
   searchBox: { flex: 1, justifyContent: 'center', padding: 24 },
-  label: { fontSize: 16, fontWeight: '600', marginBottom: 12, color: '#495057' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 6, color: '#212529' },
+  label: { fontSize: 14, color: '#6c757d', marginBottom: 16 },
   input: {
     borderWidth: 1,
     borderColor: '#ced4da',
@@ -245,15 +248,29 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: 'center',
   },
-  buttonText: { color: '#fff', fontWeight: 'bold' },
-  map: { flex: 1 },
-  infoPanel: {
-    padding: 16,
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  infoPanel: { padding: 20 },
+  vehicleLabel: { fontSize: 20, fontWeight: 'bold', color: '#212529', marginBottom: 4 },
+  updated: { fontSize: 12, color: '#6c757d', marginBottom: 16 },
+  coordBox: {
     backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
   },
-  vehicleLabel: { fontSize: 16, fontWeight: 'bold', marginBottom: 8, color: '#212529' },
+  coordTitle: { fontSize: 14, fontWeight: '600', color: '#495057', marginBottom: 8 },
+  coordText: { fontSize: 14, color: '#212529', marginBottom: 4 },
+  waiting: { color: '#6c757d', marginBottom: 16 },
+  mapsButton: {
+    backgroundColor: '#4285F4',
+    borderRadius: 6,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: '#495057', marginBottom: 8 },
   destRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   destInput: {
     flex: 1,
@@ -270,13 +287,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  eta: { fontSize: 18, fontWeight: 'bold', color: '#28A745', marginVertical: 8 },
+  eta: { fontSize: 22, fontWeight: 'bold', color: '#28A745', marginVertical: 12 },
+  directionsButton: {
+    backgroundColor: '#28A745',
+    borderRadius: 6,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   stopButton: {
     backgroundColor: '#d9534f',
     borderRadius: 6,
-    padding: 12,
+    padding: 14,
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 8,
   },
 });
 
