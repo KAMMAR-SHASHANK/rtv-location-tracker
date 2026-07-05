@@ -33,7 +33,7 @@ app.use('/api/locations', locationRoutes);
 
 
 // Start Server
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://10.2.219.131:${PORT}`);
 });
